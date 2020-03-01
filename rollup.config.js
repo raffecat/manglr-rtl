@@ -1,6 +1,15 @@
 import { eslint } from 'rollup-plugin-eslint';
 import buble from '@rollup/plugin-buble';
 import uglify from 'rollup-plugin-uglify';
+import consts from 'rollup-plugin-consts';
+import fs from 'fs'
+
+const major = 0, minor = 1
+
+const build = +fs.readFileSync('build-version', 'utf8') + 1
+fs.writeFileSync('build-version', ''+build, 'utf8')
+
+const banner = `/* <~> Manglr ${major}.${minor}.${build} | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-rtl */`
 
 // https://buble.surge.sh/guide/
 const buble_conf = {
@@ -11,6 +20,9 @@ const buble_conf = {
 }
 
 const uglify_conf = {
+  output: {
+    preamble: banner
+  },
   mangle: {
     properties: {
       // Caveat: any name used quoted e.g. obj['name'] becomes a reserved name,
@@ -57,9 +69,11 @@ export default [
     input: 'src/mount.js',
     output: {
       file: 'build/manglr.debug.js',
-      format: 'iife'
+      format: 'iife',
+      banner: banner
     },
     plugins: [
+      consts({ debug: true }),
       eslint(),
       buble(buble_conf)
     ]
@@ -71,7 +85,7 @@ export default [
       format: 'iife'
     },
     plugins: [
-      eslint(),
+      consts({ debug: false }),
       buble(buble_conf),
       uglify(uglify_conf)
     ]

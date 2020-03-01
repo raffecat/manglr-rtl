@@ -1,5 +1,5 @@
 import { debug } from './config'
-import { set_dep, queue_action, run_updates } from './deps'
+import { set_dep, null_dep, queue_action, run_updates } from './deps'
 import { Collection, model_fields_to_json, json_to_model_fields } from './models'
 import { post_json } from './network'
 
@@ -25,23 +25,26 @@ function act_set_items(sc, scope) { // (sc, scope, event)
 }
 
 function act_post(sc, scope) { // (sc, scope, event)
-  const url = sc.resolve_expr(sc, scope);  // [1] url expr.
-  const body = sc.resolve_expr(sc, scope); // [2] body expr.
-  const to = sc.resolve_expr(sc, scope);   // [3] to expr.
+  const url = sc.resolve_expr(sc, scope);   // [1] url expr.
+  const body = sc.resolve_expr(sc, scope);  // [3] body expr.
+  const to = sc.resolve_expr(sc, scope);    // [4] optional: to expr.
+  const token = sc.resolve_expr(sc, scope); // [2] optional: bearer token expr.
   if (url.val) {
     const req_body = model_fields_to_json(body)
-    post_json(url.val, req_body, function(res) {
-      json_to_model_fields(to, res, sc)
-      const actSlot = to.loadAct;
-      if (actSlot) {
-        // destination model has an @load binding to an action.
-        // MUST let the deps update first - queue the action.
-        // XXX had to defer action lookup in scope locals,
-        // because models spawn before actions do.
-        const action = to.scope.locals[actSlot-1]; // 1-bias.
-        queue_action(run_action, action)
+    post_json(url.val, token.val, req_body, function(res) {
+      if (to !== null_dep) {
+        json_to_model_fields(to, res, sc)
+        const actSlot = to.loadAct;
+        if (actSlot) {
+          // destination model has an @load binding to an action.
+          // MUST let the deps update first - queue the action.
+          // XXX had to defer action lookup in scope locals,
+          // because models spawn before actions do.
+          const action = to.scope.locals[actSlot-1]; // 1-bias.
+          queue_action(run_action, action)
+        }
+        run_updates() // network event - must run updates.
       }
-      run_updates() // network event - must run updates.
     })
   }
 }

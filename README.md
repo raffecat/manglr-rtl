@@ -18,3 +18,7 @@ Generates the following files:
 build/manglr.debug.js
 build/manglr.min.js
 ```
+
+### License
+
+MIT License

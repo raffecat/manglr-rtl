@@ -1,3 +1,4 @@
+/* <~> Manglr 0.1.12 | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-rtl */
 (function () {
   'use strict';
 
@@ -368,6 +369,7 @@
   }
 
   function model_fields_to_json(model) {
+    if ( !(model instanceof Model)) { throw 5; }
     var fields = model.fields;
     var req = {};
     for (var key in fields) {
@@ -391,6 +393,7 @@
   }
 
   function json_to_model_fields(model, values, sc) {
+    if ( !(model instanceof Model)) { throw 5; }
     var fields = model.fields;
     for (var f_name in fields) {
       if (hasOwn.call(fields, f_name)) {
@@ -433,7 +436,7 @@
     }
   }
 
-  function post_json(url, data, done) {
+  function post_json(url, token, data, done) {
     var tries = 0;
     url = window.location.protocol+"//"+window.location.host+url;
     post();
@@ -450,17 +453,17 @@
         var status = req.status, result = req.responseText;
         req.onreadystatechange = null;
         req = null;
-        if (status != 200) { return retry('http', status); }
+        if (status === 0) { return done({ error:'offline', offline:true }); }
+        if (status !== 200) { return retry('http', status); }
         var res;
-        try { res = JSON.parse(result); }
-        catch (err) { return retry('json', String(err)) }
+        try { res = JSON.parse(result); } catch (err) { return retry('json', String(err)) }
         if (!res) { return retry('null', ''); }
         if (res.retry) { return retry('retry', res.retry); }
         return done(res);
       };
       req.open('POST', url, true);
       req.setRequestHeader("Content-Type", "application/json");
-      req.setRequestHeader("X-Muncha", "54D08EF5-7286-46BE-BF75-21D48DF98B9A");
+      if (token) { req.setRequestHeader("Authorization", "bearer "+token); }
       req.send(JSON.stringify(data));
     }
   }
@@ -487,23 +490,26 @@
   }
 
   function act_post(sc, scope) { // (sc, scope, event)
-    var url = sc.resolve_expr(sc, scope);  // [1] url expr.
-    var body = sc.resolve_expr(sc, scope); // [2] body expr.
-    var to = sc.resolve_expr(sc, scope);   // [3] to expr.
+    var url = sc.resolve_expr(sc, scope);   // [1] url expr.
+    var body = sc.resolve_expr(sc, scope);  // [3] body expr.
+    var to = sc.resolve_expr(sc, scope);    // [4] optional: to expr.
+    var token = sc.resolve_expr(sc, scope); // [2] optional: bearer token expr.
     if (url.val) {
       var req_body = model_fields_to_json(body);
-      post_json(url.val, req_body, function(res) {
-        json_to_model_fields(to, res, sc);
-        var actSlot = to.loadAct;
-        if (actSlot) {
-          // destination model has an @load binding to an action.
-          // MUST let the deps update first - queue the action.
-          // XXX had to defer action lookup in scope locals,
-          // because models spawn before actions do.
-          var action = to.scope.locals[actSlot-1]; // 1-bias.
-          queue_action(run_action, action);
+      post_json(url.val, token.val, req_body, function(res) {
+        if (to !== null_dep) {
+          json_to_model_fields(to, res, sc);
+          var actSlot = to.loadAct;
+          if (actSlot) {
+            // destination model has an @load binding to an action.
+            // MUST let the deps update first - queue the action.
+            // XXX had to defer action lookup in scope locals,
+            // because models spawn before actions do.
+            var action = to.scope.locals[actSlot-1]; // 1-bias.
+            queue_action(run_action, action);
+          }
+          run_updates(); // network event - must run updates.
         }
-        run_updates(); // network event - must run updates.
       });
     }
   }
@@ -1091,7 +1097,7 @@
     // XXX prefer not to use a closure for this - delegate to document.body
     // and register in a global map - unregister in d_list.
     function action_event_handler(event) {
-      console.log(("[] event '" + name + "': "), event);
+      { console.log(("[] event '" + name + "': "), event); }
       run_action(action, event);
       run_updates(); // dom event - must run updates.
     }
@@ -1529,8 +1535,6 @@
       dom_create[op](sc, parent, scope);
     }
   }
-
-  /* <~> Manglr 0.4 | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-proto */
 
   window['manglr'] = function(tpl_str, syms) {
     var tpl = b93_decode(tpl_str); // unpack tpl data to an array of integers.

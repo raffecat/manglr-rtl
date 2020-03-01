@@ -1,5 +1,3 @@
-/* <~> Manglr 0.4 | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-proto */
-
 import { b93_decode } from './b93'
 import { spawn_children } from './spawn-children'
 import { init_sc, spawn_tpl_into } from './spawn-tpl'

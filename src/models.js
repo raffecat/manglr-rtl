@@ -1,4 +1,4 @@
-import { hasOwn } from './config'
+import { debug, hasOwn } from './config'
 import { new_dep, set_dep } from './deps'
 
 // -+-+-+-+-+-+-+-+-+ Models -+-+-+-+-+-+-+-+-+
@@ -26,6 +26,7 @@ export function Collection(scope) {
 }
 
 export function model_fields_to_json(model) {
+  if (debug && !(model instanceof Model)) { throw 5; }
   const fields = model.fields
   const req = {}
   for (let key in fields) {
@@ -49,6 +50,7 @@ export function model_fields_to_json(model) {
 }
 
 export function json_to_model_fields(model, values, sc) {
+  if (debug && !(model instanceof Model)) { throw 5; }
   const fields = model.fields
   for (let f_name in fields) {
     if (hasOwn.call(fields, f_name)) {

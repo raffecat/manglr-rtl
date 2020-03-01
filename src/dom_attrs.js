@@ -195,7 +195,7 @@ function bind_event_to_action(name, action) {
   // XXX prefer not to use a closure for this - delegate to document.body
   // and register in a global map - unregister in d_list.
   function action_event_handler(event) {
-    console.log(`[] event '${name}': `, event);
+    if (debug) console.log(`[] event '${name}': `, event);
     run_action(action, event);
     run_updates() // dom event - must run updates.
   }
