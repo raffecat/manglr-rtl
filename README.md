@@ -1,4 +1,4 @@
-# <manglr/> runtime library
+# Manglr runtime library
 
 This library is deployed in-browser with manglr apps.
 Apps are produced by the manglr AoT (ahead-of-time) compiler.
