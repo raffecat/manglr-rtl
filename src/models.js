@@ -10,16 +10,12 @@ import { new_dep, set_dep } from './deps'
 let g_model = 1;
 
 export function Model() {
-  // FIXME: need field metadata here - names, types (for loading), init-exprs!
-  // FIXME: also need to pre-create nested Models and Collections.
   this._id = 'm'+(g_model++);
   this._key = '';
   this.fields = {};
 }
 
 export function Collection(scope) {
-  // FIXME: need field metadata here - names, types (for loading), init-exprs!
-  // FIXME: also need to pre-create nested Models and Collections.
   this._id = 'c'+(g_model++);
   this.scope = scope; // for spawning new models.
   this.items = new_dep([]);
@@ -55,7 +51,7 @@ export function json_to_model_fields(model, values, sc) {
   for (let f_name in fields) {
     if (hasOwn.call(fields, f_name)) {
       const field = fields[f_name]
-      const val = values[f_name]
+      let val = values[f_name]
       if (field instanceof Model) {
         json_to_model_fields(field, val, sc)
       } else if (field instanceof Collection) {
@@ -86,8 +82,17 @@ export function json_to_model_fields(model, values, sc) {
         }
         set_dep(field.items, new_items)
       } else {
-        // XXX MUST cast value to model field type!
-        set_dep(field, val != null ? val : null)
+
+        // FIXME: MUST cast value to model field type!
+        // BUG here: (post) if the field is missing from the response,
+        // we end up setting fields to 'undefined' (e.g. flag becomes 'undefined')
+        var t = typeof field.val; // HACK: old value tells us the type!
+        if (t === 'boolean') val = !! val;
+        else if (t === 'string') val = (val || '').toString();
+        else if (t === 'number') val = + val;
+        else val = null;
+
+        set_dep(field, val)
       }
     }
   }

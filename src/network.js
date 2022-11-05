@@ -6,7 +6,7 @@ export function post_json(url, token, data, done) {
     tries++;
     if (tries > 0) return done({ error:'too many retries', reason:reason, message:msg })
     const delay = Math.min(tries * 250, 2000); // back-off.
-    window.setTimeout(post, delay);
+    setTimeout(post, delay);
   }
   function post() {
     let req = new XMLHttpRequest();

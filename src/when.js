@@ -12,8 +12,8 @@ export function create_when(sc, parent, scope) {
   // Creates a vnode representing a 'when' node.
   // When the truth value of the bound expression changes, creates or
   // destroys the contents of this vnode to bring the view into sync.
-  const body_tpl = sc.tpl[sc.ofs++]; // body template to spawn.
-  const expr_dep = resolve_expr(sc, scope);
+  const body_tpl = sc.tpl[sc.ofs++]; // [1] body template to spawn.
+  const expr_dep = resolve_expr(sc, scope); // [2..] expr
   const vnode = new_vnode(parent, null);
   const d_list = []; // local d_list to capture spawned contents.
   vnode.d_list = d_list; // for update_when, destroy_when.

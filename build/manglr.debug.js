@@ -1,25 +1,6 @@
-/* <~> Manglr 0.1.12 | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-rtl */
+/* <~> Manglr 0.1.33 | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-rtl */
 (function () {
   'use strict';
-
-  // import { debug } from './config'
-
-  function b93_decode(text) {
-    var res = [], len = text.length, i = 0, acc = 0, ch;
-    for (;i<len;i++) {
-      ch = text.charCodeAt(i);
-      if (ch >= 95) {
-        acc = (acc << 5) + (ch - 95); // high 5 bits.
-      } else {
-        if (ch > 92) { --ch; }
-        if (ch > 34) { --ch; }
-        res.push((acc * 61) + (ch - 32)); // low 61 vals.
-        acc = 0;
-      }
-    }
-    // if (debug) console.log("b93", res);
-    return res;
-  }
 
   var hasOwn = Object['prototype']['hasOwnProperty'];
 
@@ -353,16 +334,12 @@
   var g_model = 1;
 
   function Model() {
-    // FIXME: need field metadata here - names, types (for loading), init-exprs!
-    // FIXME: also need to pre-create nested Models and Collections.
     this._id = 'm'+(g_model++);
     this._key = '';
     this.fields = {};
   }
 
   function Collection(scope) {
-    // FIXME: need field metadata here - names, types (for loading), init-exprs!
-    // FIXME: also need to pre-create nested Models and Collections.
     this._id = 'c'+(g_model++);
     this.scope = scope; // for spawning new models.
     this.items = new_dep([]);
@@ -429,8 +406,17 @@
           }
           set_dep(field.items, new_items);
         } else {
-          // XXX MUST cast value to model field type!
-          set_dep(field, val != null ? val : null);
+
+          // FIXME: MUST cast value to model field type!
+          // BUG here: (post) if the field is missing from the response,
+          // we end up setting fields to 'undefined' (e.g. flag becomes 'undefined')
+          var t = typeof field.val; // HACK: old value tells us the type!
+          if (t === 'boolean') { val = !! val; }
+          else if (t === 'string') { val = (val || '').toString(); }
+          else if (t === 'number') { val = + val; }
+          else { val = null; }
+
+          set_dep(field, val);
         }
       }
     }
@@ -444,7 +430,7 @@
       tries++;
       if (tries > 0) { return done({ error:'too many retries', reason:reason, message:msg }) }
       var delay = Math.min(tries * 250, 2000); // back-off.
-      window.setTimeout(post, delay);
+      setTimeout(post, delay);
     }
     function post() {
       var req = new XMLHttpRequest();
@@ -471,9 +457,8 @@
   function act_set_field(sc, scope, event) { // (sc, scope, event)
     var from = sc.resolve_expr(sc, scope); // [1] from expr.
     var to = sc.resolve_expr(sc, scope);   // [2] to expr.
-    // XXX: -2 is "function dep" (HACK - SPECIAL CASE)
-    // XXX: but this only works when the "function dep" as top-level
-    // XXX: i.e. not nested inside an expression.
+    // XXX: -2 is "function dep" (HACK - SPECIAL CASE for event.target.value)
+    // XXX: but this only works when the "function dep" is top-level i.e. not nested inside an expression.
     var val = from.wait === -2 ? from.fn(event) : from.val;
     set_dep(to, val);
   }
@@ -491,9 +476,9 @@
 
   function act_post(sc, scope) { // (sc, scope, event)
     var url = sc.resolve_expr(sc, scope);   // [1] url expr.
-    var body = sc.resolve_expr(sc, scope);  // [3] body expr.
-    var to = sc.resolve_expr(sc, scope);    // [4] optional: to expr.
-    var token = sc.resolve_expr(sc, scope); // [2] optional: bearer token expr.
+    var body = sc.resolve_expr(sc, scope);  // [2] body expr.
+    var to = sc.resolve_expr(sc, scope);    // [3] optional: to expr.
+    var token = sc.resolve_expr(sc, scope); // [4] optional: bearer token expr.
     if (url.val) {
       var req_body = model_fields_to_json(body);
       post_json(url.val, token.val, req_body, function(res) {
@@ -567,6 +552,7 @@
   function bind_one_arg(sc, scope, update_fn, is_collection) {
     var arg = resolve_expr(sc, scope);
     if (is_collection) {
+      // collection-type expressions always result in a Collection instance (not a Cell)
       if ( !(arg instanceof Collection)) { throw 5; }
       arg = arg.items;
     }
@@ -604,6 +590,8 @@
 
   function update_concat(dep, args) {
     // concatenate text fragments from each input dep.
+    // has "no value" until every fragment "has value",
+    // which makes it safe to bind to DOM src props, etc.
     var text = "";
     var has_value = true;
     for (var i=0; i<args['length']; i++) {
@@ -616,52 +604,124 @@
 
   // TERNARY
 
-  function expr_ternary(sc, scope) {
-    return bind_to_args(sc, scope, 3, update_ternary);
-  }
-
+  function expr_ternary(sc, scope) { return bind_to_args(sc, scope, 3, update_ternary) }
   function update_ternary(dep, args) {
-    dep.val = is_true(args[0].val) ? args[1].val : args[2].val;
+    // has "no value" until the condition "has value".
+    var cond = args[0].val;
+    dep.val = (cond === null) ? null : is_true(cond) ? args[1].val : args[2].val;
   }
 
   // EQUALS
 
-  function expr_equals(sc, scope) {
-    return bind_to_args(sc, scope, 2, update_equals);
-  }
-
+  function expr_equals(sc, scope) { return bind_to_args(sc, scope, 2, update_equals) }
   function update_equals(dep, args) {
-    dep.val = (args[0].val === args[1].val);
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left === right) : null;
   }
 
   // NOT_EQUAL
 
-  function expr_not_equal(sc, scope) {
-    return bind_to_args(sc, scope, 2, update_not_equal);
+  function expr_not_equal(sc, scope) { return bind_to_args(sc, scope, 2, update_not_equal) }
+  function update_not_equal(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left !== right) : null;
   }
 
-  function update_not_equal(dep, args) {
-    dep.val = (args[0].val !== args[1].val);
+  // GREATER_EQUAL
+
+  function expr_ge(sc, scope) { return bind_to_args(sc, scope, 2, update_ge) }
+  function update_ge(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left >= right) : null;
+  }
+
+  // LESS_EQUAL
+
+  function expr_le(sc, scope) { return bind_to_args(sc, scope, 2, update_le) }
+  function update_le(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left <= right) : null;
+  }
+
+  // GREATER
+
+  function expr_gt(sc, scope) { return bind_to_args(sc, scope, 2, update_gt) }
+  function update_gt(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left > right) : null;
+  }
+
+  // LESS
+
+  function expr_lt(sc, scope) { return bind_to_args(sc, scope, 2, update_lt) }
+  function update_lt(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left < right) : null;
+  }
+
+  // ADD
+
+  function expr_add(sc, scope) { return bind_to_args(sc, scope, 2, update_add) }
+  function update_add(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left + right) : null;
+  }
+
+  // SUBTRACT
+
+  function expr_sub(sc, scope) { return bind_to_args(sc, scope, 2, update_sub) }
+  function update_sub(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left - right) : null;
   }
 
   // MULTIPLY
 
-  function expr_multiply(sc, scope) {
-    return bind_to_args(sc, scope, 2, update_multiply);
+  function expr_multiply(sc, scope) { return bind_to_args(sc, scope, 2, update_multiply) }
+  function update_multiply(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left * right) : null;
   }
 
-  function update_multiply(dep, args) {
-    dep.val = (args[0].val * args[1].val);
+  // DIVIDE
+
+  function expr_div(sc, scope) { return bind_to_args(sc, scope, 2, update_div) }
+  function update_div(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left / right) : null;
+  }
+
+  // MODULO
+
+  function expr_mod(sc, scope) { return bind_to_args(sc, scope, 2, update_mod) }
+  function update_mod(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    dep.val = (left !== null && right !== null) ? (left % right) : null;
+  }
+
+  // OR
+
+  function expr_or(sc, scope) { return bind_to_args(sc, scope, 2, update_or) }
+  function update_or(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    if (left === true || right === true) { dep.val = true; return } // short-circuit.
+    dep.val = (left !== null || right !== null) ? (left || right) : null;
+  }
+
+  // AND
+
+  function expr_and(sc, scope) { return bind_to_args(sc, scope, 2, update_and) }
+  function update_and(dep, args) {
+    var left = args[0].val, right = args[1].val;
+    if (left === false || right === false) { dep.val = false; return } // short-circuit.
+    dep.val = (left !== null && right !== null) ? (left && right) : null;
   }
 
   // NOT
 
-  function expr_not(sc, scope) {
-    return bind_one_arg(sc, scope, update_not);
-  }
-
+  function expr_not(sc, scope) { return bind_one_arg(sc, scope, update_not) }
   function update_not(dep, arg) {
-    dep.val = ! arg.val;
+    dep.val = (arg.val === null) ? null : !is_true(arg.val);
   }
 
   // EMPTY - COLLECTIONS
@@ -671,7 +731,7 @@
   }
 
   function update_is_empty(dep, arg) {
-    // can only be applied to a Collection.
+    // can only be applied to a Collection (never "no value")
     dep.val = ! arg.val.length;
   }
 
@@ -680,8 +740,17 @@
   }
 
   function update_not_empty(dep, arg) {
-    // can only be applied to a Collection.
+    // can only be applied to a Collection (never "no value")
     dep.val = !! arg.val.length;
+  }
+
+  function expr_count(sc, scope) {
+    return bind_one_arg(sc, scope, update_count, true); // is_collection.
+  }
+
+  function update_count(dep, arg) {
+    // can only be applied to a Collection (never "no value")
+    dep.val = arg.val.length;
   }
 
   // CONSTANTS
@@ -692,7 +761,7 @@
   }
 
   function expr_const(sc) {
-    // syms contains javascript strings and numbers (maybe also lists, objects)
+    // syms contains javascript strings, numbers, booleans (maybe also lists, objects)
     var val = sc.syms[sc.tpl[sc.ofs++]];
     { console.log("[e] const value: "+val); }
     return const_dep(val);
@@ -713,6 +782,7 @@
     var name = sc.syms[sc.tpl[sc.ofs++]];
     var left = resolve_expr(sc, scope);
     { console.log(("[e] field '" + name + "' from:"), left); }
+    // model-type expressions always result in a Model instance (not a Cell)
     if (left instanceof Model) {
       var dep = left.fields[name];
       if ( !dep) { throw 5; } // MUST exist.
@@ -722,6 +792,16 @@
   }
 
   // MODEL
+
+  // local slots hold one of: Model, Collection, Action, Cell [dep]
+
+  // local model slots always hold actual Model instances (not Cells)
+  // likewise, nested model fields always hold actual Model instances.
+  // component props of model-type bind the outer Model instance into the inner component's slot.
+
+  // each [non-model] field of a Model is a distinct, live Cell [root-dep]
+  // component props bind outer Cell instances into the inner component's slots.
+  // DOM attribute bindings subscribe to those Cell instances directly.
 
   function spawn_model_tpl(sc, scope) {
     var mod = new Model();
@@ -734,9 +814,7 @@
     var num = sc.tpl[sc.ofs++];
     while (num--) {
       var name = sc.syms[sc.tpl[sc.ofs++]];
-      // XXX not enough - need to create a root dep for each field (not a constant dep)
-      // XXX maybe init from a const/expr dep here (COPY IN) to a new field dep.
-      // XXX: timing issue here - can copy from dep before it "has value" (a non-null value)
+      // XXX: timing issue here - can copy from init-dep before it "has value" (a non-null value)
       var init = resolve_expr(sc, scope); // XXX wasteful new const deps all the time.
       if (init instanceof Model || init instanceof Collection) {
         mod.fields[name] = init; // not wrapped in a field-value dep.
@@ -764,6 +842,8 @@
   }
 
   // ACTIONS
+
+  // an Action slot holds a closure that captures the local scope (slots)
 
   function expr_action(sc, scope) {
     var refresh = sc.tpl[sc.ofs++]; // [1] auto refresh (ms)
@@ -819,10 +899,10 @@
   // EXPR
 
   var expr_ops = [
-    expr_null,          // 0 - null dep.
-    expr_const,         // 1 - syms constant dep.
-    expr_local,         // 2 - local slot (dep, model, collection)
-    expr_field,         // 3 - field of a model.
+    expr_null,          // 0 - get null dep.
+    expr_const,         // 1 - get syms constant as a [new] dep.
+    expr_local,         // 2 - get local slot (dep, model, collection)
+    expr_field,         // 3 - get field of a model.
     expr_concat,        // 4 - concatenate text.
     expr_equals,        // 5 - left == right.
     expr_not,           // 6 - ! arg.
@@ -834,7 +914,18 @@
     expr_not_equal,     // 12 - left ~= right.
     expr_multiply,      // 13 - left * right.
     expr_is_empty,      // 14 - collection is empty.
-    expr_not_empty ];
+    expr_not_empty,     // 15 - collection is not empty.
+    expr_ge,            // 16 - left >= right.
+    expr_le,            // 17 - left <= right.
+    expr_gt,            // 18 - left > right.
+    expr_lt,            // 19 - left < right.
+    expr_count,         // 20 - count collection size.
+    expr_sub,           // 21 - left - right.
+    expr_add,           // 22 - left + right.
+    expr_div,           // 23 - left / right.
+    expr_mod,           // 24 - left % right.
+    expr_or,            // 25 - left OR right.
+    expr_and ];
 
   function resolve_expr(sc, scope) {
     if (in_transaction) { throw 2; } // assert: cannot fwd.push inside a transaction.
@@ -912,13 +1003,13 @@
   // attr_func(sc, dom_node, scope, cls)
 
   var attr_ops = [
-    attr_literal_text,     // 0
-    attr_literal_class,    // 1
-    attr_bound_attr,       // 2
-    attr_bound_prop_text,  // 3
-    attr_bound_prop_bool,  // 4
-    attr_bound_class,      // 5
-    attr_bound_style_text, // 6
+    attr_const_attr,       // 0 // A_CONST_TEXT (setAttribute)
+    attr_const_class,      // 1 // A_CONST_CLASS (class name)
+    attr_bound_attr,       // 2 // A_BOUND_ATTR (setAttribute)
+    attr_bound_prop_text,  // 3 // A_BOUND_PROP_TEXT (DOM property)
+    attr_bound_prop_bool,  // 4 // A_BOUND_PROP_BOOL (DOM property)
+    attr_bound_class,      // 5 // A_BOUND_CLASS (class name)
+    attr_bound_style_prop, // 6 // A_BOUND_STYLE_TEXT (DOM property)
     attr_on_event ];
 
   function bind_to_expr(name, expr_dep, dom_node, scope, update_func) {
@@ -936,7 +1027,7 @@
 
   // -+-+-+-+-+-+-+-+-+ Literal Attribute / Class -+-+-+-+-+-+-+-+-+
 
-  function attr_literal_text(sc, dom_node) {
+  function attr_const_attr(sc, dom_node) {
     // used for custom attributes such as aria-role.
     var attr = sc.syms[sc.tpl[sc.ofs++]];
     var text = sc.syms[sc.tpl[sc.ofs++]];
@@ -944,7 +1035,7 @@
     dom_node['setAttribute'](attr, text);
   }
 
-  function attr_literal_class(sc, dom_node, scope, cls) {
+  function attr_const_class(sc, dom_node, scope, cls) {
     var name = sc.syms[sc.tpl[sc.ofs++]];
     { console.log("[a] literal class: "+name); }
     cls['push'](name);
@@ -1058,7 +1149,7 @@
 
   // -+-+-+-+-+-+-+-+-+ Bound Style -+-+-+-+-+-+-+-+-+
 
-  function attr_bound_style_text(sc, dom_node, scope) {
+  function attr_bound_style_prop(sc, dom_node, scope) {
     var name = sc.syms[sc.tpl[sc.ofs++]];
     var expr_dep = resolve_expr(sc, scope);
     { console.log("[a] bound style: "+name, expr_dep); }
@@ -1084,7 +1175,7 @@
     var bound_arg = resolve_expr(sc, scope); // [3] bound argument to the action.
     var ref_act = scope.locals[slot];
     // action { sc, scope, tpl, arg } - arg should be null (not yet bound)
-    // make a copy for each action _closed over_ its arguments.
+    // make a copy of the action closure, but with args actually bound.
     var action = { sc:sc, scope:ref_act.scope, tpl:ref_act.tpl, arg:bound_arg };
     { action.d_is = 'action'; }
     { console.log(("[a] on event: '" + name + "' n=" + slot + ":"), action); }
@@ -1286,8 +1377,8 @@
     // Creates a vnode representing a 'when' node.
     // When the truth value of the bound expression changes, creates or
     // destroys the contents of this vnode to bring the view into sync.
-    var body_tpl = sc.tpl[sc.ofs++]; // body template to spawn.
-    var expr_dep = resolve_expr(sc, scope);
+    var body_tpl = sc.tpl[sc.ofs++]; // [1] body template to spawn.
+    var expr_dep = resolve_expr(sc, scope); // [2..] expr
     var vnode = new_vnode(parent, null);
     var d_list = []; // local d_list to capture spawned contents.
     vnode.d_list = d_list; // for update_when, destroy_when.
@@ -1536,13 +1627,16 @@
     }
   }
 
+  // import { b93_decode } from './b93'
+
   window['manglr'] = function(tpl_str, syms) {
-    var tpl = b93_decode(tpl_str); // unpack tpl data to an array of integers.
+    var tpl = tpl_str; // b93_decode(tpl_str); // unpack tpl data to an array of integers.
     init_sc(tpl, syms, spawn_children);
     // new_scope: { locals, cssm, c_tpl, c_locals, c_cssm, d_list }
     var scope = { locals:[], cssm:"", c_tpl:0, c_locals:[], c_cssm:"", d_list:[] };
     var vnode = new_vnode(null, null);
     vnode.dom = document.body;
+    // spawn template #1 into the DOM body.
     spawn_tpl_into(1, scope, vnode);
     run_updates();
   };

@@ -31,6 +31,7 @@ function bind_to_args(sc, scope, len, update_fn) {
 function bind_one_arg(sc, scope, update_fn, is_collection) {
   let arg = resolve_expr(sc, scope);
   if (is_collection) {
+    // collection-type expressions always result in a Collection instance (not a Cell)
     if (debug && !(arg instanceof Collection)) throw 5;
     arg = arg.items;
   }
@@ -66,6 +67,8 @@ function expr_concat(sc, scope) {
 
 function update_concat(dep, args) {
   // concatenate text fragments from each input dep.
+  // has "no value" until every fragment "has value",
+  // which makes it safe to bind to DOM src props, etc.
   let text = "";
   let has_value = true;
   for (let i=0; i<args['length']; i++) {
@@ -78,52 +81,124 @@ function update_concat(dep, args) {
 
 // TERNARY
 
-function expr_ternary(sc, scope) {
-  return bind_to_args(sc, scope, 3, update_ternary);
-}
-
+function expr_ternary(sc, scope) { return bind_to_args(sc, scope, 3, update_ternary) }
 function update_ternary(dep, args) {
-  dep.val = is_true(args[0].val) ? args[1].val : args[2].val;
+  // has "no value" until the condition "has value".
+  const cond = args[0].val
+  dep.val = (cond === null) ? null : is_true(cond) ? args[1].val : args[2].val;
 }
 
 // EQUALS
 
-function expr_equals(sc, scope) {
-  return bind_to_args(sc, scope, 2, update_equals);
-}
-
+function expr_equals(sc, scope) { return bind_to_args(sc, scope, 2, update_equals) }
 function update_equals(dep, args) {
-  dep.val = (args[0].val === args[1].val);
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left === right) : null
 }
 
 // NOT_EQUAL
 
-function expr_not_equal(sc, scope) {
-  return bind_to_args(sc, scope, 2, update_not_equal);
+function expr_not_equal(sc, scope) { return bind_to_args(sc, scope, 2, update_not_equal) }
+function update_not_equal(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left !== right) : null;
 }
 
-function update_not_equal(dep, args) {
-  dep.val = (args[0].val !== args[1].val);
+// GREATER_EQUAL
+
+function expr_ge(sc, scope) { return bind_to_args(sc, scope, 2, update_ge) }
+function update_ge(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left >= right) : null;
+}
+
+// LESS_EQUAL
+
+function expr_le(sc, scope) { return bind_to_args(sc, scope, 2, update_le) }
+function update_le(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left <= right) : null;
+}
+
+// GREATER
+
+function expr_gt(sc, scope) { return bind_to_args(sc, scope, 2, update_gt) }
+function update_gt(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left > right) : null;
+}
+
+// LESS
+
+function expr_lt(sc, scope) { return bind_to_args(sc, scope, 2, update_lt) }
+function update_lt(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left < right) : null;
+}
+
+// ADD
+
+function expr_add(sc, scope) { return bind_to_args(sc, scope, 2, update_add) }
+function update_add(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left + right) : null;
+}
+
+// SUBTRACT
+
+function expr_sub(sc, scope) { return bind_to_args(sc, scope, 2, update_sub) }
+function update_sub(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left - right) : null;
 }
 
 // MULTIPLY
 
-function expr_multiply(sc, scope) {
-  return bind_to_args(sc, scope, 2, update_multiply);
+function expr_multiply(sc, scope) { return bind_to_args(sc, scope, 2, update_multiply) }
+function update_multiply(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left * right) : null;
 }
 
-function update_multiply(dep, args) {
-  dep.val = (args[0].val * args[1].val);
+// DIVIDE
+
+function expr_div(sc, scope) { return bind_to_args(sc, scope, 2, update_div) }
+function update_div(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left / right) : null;
+}
+
+// MODULO
+
+function expr_mod(sc, scope) { return bind_to_args(sc, scope, 2, update_mod) }
+function update_mod(dep, args) {
+  const left = args[0].val, right = args[1].val
+  dep.val = (left !== null && right !== null) ? (left % right) : null;
+}
+
+// OR
+
+function expr_or(sc, scope) { return bind_to_args(sc, scope, 2, update_or) }
+function update_or(dep, args) {
+  const left = args[0].val, right = args[1].val
+  if (left === true || right === true) { dep.val = true; return } // short-circuit.
+  dep.val = (left !== null || right !== null) ? (left || right) : null;
+}
+
+// AND
+
+function expr_and(sc, scope) { return bind_to_args(sc, scope, 2, update_and) }
+function update_and(dep, args) {
+  const left = args[0].val, right = args[1].val
+  if (left === false || right === false) { dep.val = false; return } // short-circuit.
+  dep.val = (left !== null && right !== null) ? (left && right) : null;
 }
 
 // NOT
 
-function expr_not(sc, scope) {
-  return bind_one_arg(sc, scope, update_not);
-}
-
+function expr_not(sc, scope) { return bind_one_arg(sc, scope, update_not) }
 function update_not(dep, arg) {
-  dep.val = ! arg.val;
+  dep.val = (arg.val === null) ? null : !is_true(arg.val);
 }
 
 // EMPTY - COLLECTIONS
@@ -133,7 +208,7 @@ function expr_is_empty(sc, scope) {
 }
 
 function update_is_empty(dep, arg) {
-  // can only be applied to a Collection.
+  // can only be applied to a Collection (never "no value")
   dep.val = ! arg.val.length;
 }
 
@@ -142,8 +217,17 @@ function expr_not_empty(sc, scope) {
 }
 
 function update_not_empty(dep, arg) {
-  // can only be applied to a Collection.
+  // can only be applied to a Collection (never "no value")
   dep.val = !! arg.val.length;
+}
+
+function expr_count(sc, scope) {
+  return bind_one_arg(sc, scope, update_count, true); // is_collection.
+}
+
+function update_count(dep, arg) {
+  // can only be applied to a Collection (never "no value")
+  dep.val = arg.val.length;
 }
 
 // CONSTANTS
@@ -154,7 +238,7 @@ function expr_null() {
 }
 
 function expr_const(sc) {
-  // syms contains javascript strings and numbers (maybe also lists, objects)
+  // syms contains javascript strings, numbers, booleans (maybe also lists, objects)
   const val = sc.syms[sc.tpl[sc.ofs++]];
   if (log_expr) console.log("[e] const value: "+val);
   return const_dep(val);
@@ -175,6 +259,7 @@ function expr_field(sc, scope) {
   const name = sc.syms[sc.tpl[sc.ofs++]];
   const left = resolve_expr(sc, scope);
   if (log_expr) console.log(`[e] field '${name}' from:`, left);
+  // model-type expressions always result in a Model instance (not a Cell)
   if (left instanceof Model) {
     const dep = left.fields[name];
     if (debug && !dep) throw 5; // MUST exist.
@@ -185,6 +270,16 @@ function expr_field(sc, scope) {
 }
 
 // MODEL
+
+// local slots hold one of: Model, Collection, Action, Cell [dep]
+
+// local model slots always hold actual Model instances (not Cells)
+// likewise, nested model fields always hold actual Model instances.
+// component props of model-type bind the outer Model instance into the inner component's slot.
+
+// each [non-model] field of a Model is a distinct, live Cell [root-dep]
+// component props bind outer Cell instances into the inner component's slots.
+// DOM attribute bindings subscribe to those Cell instances directly.
 
 export function spawn_model_tpl(sc, scope) {
   const mod = new Model();
@@ -197,9 +292,7 @@ export function spawn_model_tpl(sc, scope) {
   let num = sc.tpl[sc.ofs++];
   while (num--) {
     const name = sc.syms[sc.tpl[sc.ofs++]];
-    // XXX not enough - need to create a root dep for each field (not a constant dep)
-    // XXX maybe init from a const/expr dep here (COPY IN) to a new field dep.
-    // XXX: timing issue here - can copy from dep before it "has value" (a non-null value)
+    // XXX: timing issue here - can copy from init-dep before it "has value" (a non-null value)
     const init = resolve_expr(sc, scope); // XXX wasteful new const deps all the time.
     if (init instanceof Model || init instanceof Collection) {
       mod.fields[name] = init; // not wrapped in a field-value dep.
@@ -227,6 +320,8 @@ function expr_l_collection(sc, scope) {
 }
 
 // ACTIONS
+
+// an Action slot holds a closure that captures the local scope (slots)
 
 function expr_action(sc, scope) {
   const refresh = sc.tpl[sc.ofs++]; // [1] auto refresh (ms)
@@ -282,10 +377,10 @@ function update_event_target(event) {
 // EXPR
 
 const expr_ops = [
-  expr_null,          // 0 - null dep.
-  expr_const,         // 1 - syms constant dep.
-  expr_local,         // 2 - local slot (dep, model, collection)
-  expr_field,         // 3 - field of a model.
+  expr_null,          // 0 - get null dep.
+  expr_const,         // 1 - get syms constant as a [new] dep.
+  expr_local,         // 2 - get local slot (dep, model, collection)
+  expr_field,         // 3 - get field of a model.
   expr_concat,        // 4 - concatenate text.
   expr_equals,        // 5 - left == right.
   expr_not,           // 6 - ! arg.
@@ -298,6 +393,17 @@ const expr_ops = [
   expr_multiply,      // 13 - left * right.
   expr_is_empty,      // 14 - collection is empty.
   expr_not_empty,     // 15 - collection is not empty.
+  expr_ge,            // 16 - left >= right.
+  expr_le,            // 17 - left <= right.
+  expr_gt,            // 18 - left > right.
+  expr_lt,            // 19 - left < right.
+  expr_count,         // 20 - count collection size.
+  expr_sub,           // 21 - left - right.
+  expr_add,           // 22 - left + right.
+  expr_div,           // 23 - left / right.
+  expr_mod,           // 24 - left % right.
+  expr_or,            // 25 - left OR right.
+  expr_and,           // 26 - left AND right.
 ];
 
 export function resolve_expr(sc, scope) {

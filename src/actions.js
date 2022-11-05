@@ -6,9 +6,8 @@ import { post_json } from './network'
 function act_set_field(sc, scope, event) { // (sc, scope, event)
   const from = sc.resolve_expr(sc, scope); // [1] from expr.
   const to = sc.resolve_expr(sc, scope);   // [2] to expr.
-  // XXX: -2 is "function dep" (HACK - SPECIAL CASE)
-  // XXX: but this only works when the "function dep" as top-level
-  // XXX: i.e. not nested inside an expression.
+  // XXX: -2 is "function dep" (HACK - SPECIAL CASE for event.target.value)
+  // XXX: but this only works when the "function dep" is top-level i.e. not nested inside an expression.
   const val = from.wait === -2 ? from.fn(event) : from.val;
   set_dep(to, val);
 }
@@ -26,9 +25,9 @@ function act_set_items(sc, scope) { // (sc, scope, event)
 
 function act_post(sc, scope) { // (sc, scope, event)
   const url = sc.resolve_expr(sc, scope);   // [1] url expr.
-  const body = sc.resolve_expr(sc, scope);  // [3] body expr.
-  const to = sc.resolve_expr(sc, scope);    // [4] optional: to expr.
-  const token = sc.resolve_expr(sc, scope); // [2] optional: bearer token expr.
+  const body = sc.resolve_expr(sc, scope);  // [2] body expr.
+  const to = sc.resolve_expr(sc, scope);    // [3] optional: to expr.
+  const token = sc.resolve_expr(sc, scope); // [4] optional: bearer token expr.
   if (url.val) {
     const req_body = model_fields_to_json(body)
     post_json(url.val, token.val, req_body, function(res) {

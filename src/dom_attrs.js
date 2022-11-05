@@ -9,14 +9,14 @@ import { run_action } from './actions'
 // attr_func(sc, dom_node, scope, cls)
 
 export const attr_ops = [
-  attr_literal_text,     // 0
-  attr_literal_class,    // 1
-  attr_bound_attr,       // 2
-  attr_bound_prop_text,  // 3
-  attr_bound_prop_bool,  // 4
-  attr_bound_class,      // 5
-  attr_bound_style_text, // 6
-  attr_on_event,         // 7
+  attr_const_attr,       // 0 // A_CONST_TEXT (setAttribute)
+  attr_const_class,      // 1 // A_CONST_CLASS (class name)
+  attr_bound_attr,       // 2 // A_BOUND_ATTR (setAttribute)
+  attr_bound_prop_text,  // 3 // A_BOUND_PROP_TEXT (DOM property)
+  attr_bound_prop_bool,  // 4 // A_BOUND_PROP_BOOL (DOM property)
+  attr_bound_class,      // 5 // A_BOUND_CLASS (class name)
+  attr_bound_style_prop, // 6 // A_BOUND_STYLE_TEXT (DOM property)
+  attr_on_event,         // 7 // A_ON_EVENT (addEventListener)
 ];
 
 function bind_to_expr(name, expr_dep, dom_node, scope, update_func) {
@@ -34,7 +34,7 @@ function destroy_bound_expr(bind_dep) {
 
 // -+-+-+-+-+-+-+-+-+ Literal Attribute / Class -+-+-+-+-+-+-+-+-+
 
-function attr_literal_text(sc, dom_node) {
+function attr_const_attr(sc, dom_node) {
   // used for custom attributes such as aria-role.
   const attr = sc.syms[sc.tpl[sc.ofs++]];
   const text = sc.syms[sc.tpl[sc.ofs++]];
@@ -42,7 +42,7 @@ function attr_literal_text(sc, dom_node) {
   dom_node['setAttribute'](attr, text);
 }
 
-function attr_literal_class(sc, dom_node, scope, cls) {
+function attr_const_class(sc, dom_node, scope, cls) {
   const name = sc.syms[sc.tpl[sc.ofs++]];
   if (log_spawn) console.log("[a] literal class: "+name);
   cls['push'](name);
@@ -156,7 +156,7 @@ function update_bound_class(bind_dep, state) {
 
 // -+-+-+-+-+-+-+-+-+ Bound Style -+-+-+-+-+-+-+-+-+
 
-function attr_bound_style_text(sc, dom_node, scope) {
+function attr_bound_style_prop(sc, dom_node, scope) {
   const name = sc.syms[sc.tpl[sc.ofs++]];
   const expr_dep = resolve_expr(sc, scope);
   if (log_spawn) console.log("[a] bound style: "+name, expr_dep);
@@ -182,7 +182,7 @@ function attr_on_event(sc, dom_node, scope) {
   const bound_arg = resolve_expr(sc, scope); // [3] bound argument to the action.
   const ref_act = scope.locals[slot];
   // action { sc, scope, tpl, arg } - arg should be null (not yet bound)
-  // make a copy for each action _closed over_ its arguments.
+  // make a copy of the action closure, but with args actually bound.
   const action = { sc:sc, scope:ref_act.scope, tpl:ref_act.tpl, arg:bound_arg };
   if (debug) action.d_is = 'action';
   if (log_spawn) console.log(`[a] on event: '${name}' n=${slot}:`, action);

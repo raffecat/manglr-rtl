@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-rollup -c
+npx rollup -c
