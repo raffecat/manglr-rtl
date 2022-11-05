@@ -27,7 +27,7 @@
   "homepage": "https://github.com/raffecat/manglr-rtl#readme",
   "devDependencies": {
     "@rollup/plugin-buble": "^0.21.0",
-    "acorn": "^6.4.0",
+    "acorn": "^6.4.1",
     "rollup": "^1.27.14",
     "rollup-plugin-consts": "^1.0.1",
     "rollup-plugin-eslint": "^7.0.0",
