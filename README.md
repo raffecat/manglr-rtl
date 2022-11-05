@@ -9,7 +9,7 @@ Requires node.js
 
 ```
 npm install
-rollup -c
+npx rollup -c
 ```
 
 Generates the following files:

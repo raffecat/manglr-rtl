@@ -1,4 +1,4 @@
-/* <~> Manglr 0.1.33 | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-rtl */
+/* <~> Manglr 0.1.34 | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-rtl */
 (function () {
   'use strict';
 
