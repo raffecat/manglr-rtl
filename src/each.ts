@@ -2,26 +2,25 @@ import { debug, hasOwn, log_spawn } from './config'
 import { resolve_expr } from './expr_ops'
 import { new_vnode, move_vnode, unlink_vnode, clear_child_nodes } from './vnode'
 import { d_list_add, run_d_list } from './d_list'
-import { new_dep, subscribe_dep, remove_dep, kill_dep, queue_action } from './deps'
+import { new_cell, subscribe_dep, remove_fwd, kill_cell, queue_action } from './cells'
 import { spawn_tpl_into } from './spawn-tpl'
 import { Collection } from './models'
+import { Cell, CollectionType, DList, EachKeys, EachState, Local, ModelType, Scope, SpawnCtx, VNode } from './types'
 
-// sc { tpl, ofs, syms, fragment, spawn_children }
-
-export function create_each(sc, parent, scope) {
+export function create_each(sc:SpawnCtx, parent:VNode, scope:Scope): void {
   // runs in the context of an application update action.
   // Creates a vnode representing the contents of the repeat node.
   // When the expression value changes, iterates over the new value creating
   // and destroying child vnodes to bring the view into sync with the value.
-  const bind_as = sc.tpl[sc.ofs++]; // index in locals.
-  const body_tpl = sc.tpl[sc.ofs++]; // body template to spawn.
-  const coll = resolve_expr(sc, scope);
+  const bind_as = sc.tpl[sc.ofs++]!; // index in locals.
+  const body_tpl = sc.tpl[sc.ofs++]!; // body template to spawn.
+  const coll = resolve_expr(sc, scope) as CollectionType; // checked below
   if (!(coll instanceof Collection)) throw 5; // assert: must be a Collection.
   const vnode = new_vnode(parent, null);
-  const state = { vnode:vnode, scope:scope, coll:coll, body_tpl:body_tpl, bind_as:bind_as, have_keys:{} };
+  const state:EachState = { vnode:vnode, scope:scope, coll:coll, body_tpl:body_tpl, bind_as:bind_as, have_keys:{} };
   if (debug) { vnode.d_is = 'each'; vnode.d_in = scope.cssm; vnode.d_state = state }
   if (log_spawn) console.log("[s] create 'each':", state);
-  const each_dep = new_dep(coll.items.val, update_each_dep, state);
+  const each_dep = new_cell(coll.items.val, update_each_dep, state);
   d_list_add(scope.d_list, destroy_each, each_dep);
   // create_each in two different contexts:
   // (a) initial render - (want to render the rep children now!)
@@ -50,25 +49,25 @@ export function create_each(sc, parent, scope) {
 // state objects - so they can spawn new children using that scope.
 // all other nodes will pass through their scope while spawning.
 
-function update_each_dep(when_dep, state) {
+function update_each_dep(when_dep:Cell, state:EachState): void {
   // runs inside a dep-update transaction.
   // cannot change the dep network during a dep-update transaction,
   // so queue an action to add/remove nodes.
   queue_action(update_each_action, state)
 }
 
-function update_each_action(state) {
+function update_each_action(state:EachState): void {
   // runs in the context of an application update action.
   // TODO FIXME: since update is queued, MUST check if the 'each' is dead (removed)
-  const seq = state.coll.items.val; // Collection: always an Array.
-  const have_keys = state.have_keys; // Set of { Model._id -> scope }
-  const new_keys = {};
+  const seq = state.coll.items.val as ModelType[]; // Collection: always an Array.
+  const have_keys:EachKeys = state.have_keys; // Set of { Model._id -> VNode }
+  const new_keys:EachKeys  = {};
   const rep_vnode = state.vnode;
   let next_vnode = rep_vnode.first; // first existing child vnode (can be null)
   for (var i=0; i<seq['length']; i++) {
-    const model = seq[i]; // instanceof Model from Collection.
+    const model = seq[i]!; // instanceof Model from Collection.
     const key = model._id; // KEY function.
-    let inst_vnode;
+    let inst_vnode: VNode|undefined;
     if (hasOwn['call'](have_keys, key)) {
       inst_vnode = have_keys[key];
       if (inst_vnode) {
@@ -83,15 +82,20 @@ function update_each_action(state) {
       }
     } else {
       // create a child vnode inserted before next_vnode.
-      const d_list = [];
+      const new_d_list:DList = [];
       inst_vnode = new_vnode(rep_vnode, next_vnode);
-      inst_vnode.d_list = d_list; // attach d_list for destroy_rep_children, destroy_each.
+      inst_vnode.d_list = new_d_list; // attach d_list for destroy_rep_children, destroy_each.
       // clone the scope.
-      const scope = state.scope;
-      const new_locals = clone_locals(scope.locals);
-      // new_scope: { locals, cssm, c_tpl, c_locals, c_cssm, d_list }
-      const new_scope = { locals:new_locals, cssm:scope.cssm,
-        c_tpl:scope.c_tpl, c_locals:scope.c_locals, c_cssm:scope.c_cssm, d_list:d_list };
+      const enclosing = state.scope;
+      const new_locals = enclosing.locals.slice(); // COPY.
+      const new_scope:Scope = {
+        locals: new_locals,
+        cssm: enclosing.cssm,
+        c_tpl: enclosing.c_tpl,
+        c_locals: enclosing.c_locals,
+        c_cssm: enclosing.c_cssm,
+        d_list: new_d_list
+      };
       // assign the model into the new scope.
       new_locals[state.bind_as] = model;
       // spawn the contents of the repeat node.
@@ -106,19 +110,13 @@ function update_each_action(state) {
   destroy_rep_children(next_vnode);
 }
 
-function clone_locals(locals) {
-  const new_locals = new Array(locals.length);
-  for (let i=0; i<locals.length; i++) new_locals[i] = locals[i];
-  return new_locals;
-}
-
-function destroy_rep_children(next_child) {
+function destroy_rep_children(next_child:VNode|null): void {
   // runs in the context of an application update action.
   while (next_child) {
     const after = next_child.next_s; // capture before unlink.
     // destroy everything on the d_list for the child.
     // child vnodes of rep_vnode always have a d_list attached.
-    run_d_list(next_child.d_list, false); // in_destroy=false.
+    run_d_list(next_child.d_list!, false); // in_destroy=false.
     // remove the child vnode from its parent.
     unlink_vnode(next_child);
     // remove the DOM contents of the child from the DOM.
@@ -128,18 +126,19 @@ function destroy_rep_children(next_child) {
   }
 }
 
-function destroy_each(each_dep) {
+function destroy_each(each_dep:Cell): void {
   // runs in the context of an application update action.
   // called from enclosing d_list (will be an 'if' or 'child-of-repeat' d_list)
   // must unsubscribe each_dep from the coll.items.
-  const state = each_dep.arg;
-  kill_dep(each_dep); // do not receive any more updates.
-  remove_dep(state.coll.items, each_dep); // remove each_dep from coll.items fwd list.
+  const state = each_dep.state as EachState;
+  kill_cell(each_dep); // do not receive any more updates.
+  remove_fwd(state.coll.items, each_dep); // remove each_dep from coll.items fwd list (stop updates)
   // must loop over child vnodes and run their d_lists.
   // note: (d_list) in_destroy == true : no need to remove child DOM nodes or vnodes.
   for (let child = state.vnode.first; child; child = child.next_s) {
     // destroy everything on the d_list for the child.
-    // child vnodes of rep_vnode always have a d_list attached.
-    run_d_list(child.d_list, true); // in_destroy=true.
+    // child vnodes of each_vnode always have a d_list attached.
+    // note: this d_list contains entries that destroy all nested scopes/states.
+    run_d_list(child.d_list!, true); // in_destroy=true.
   }
 }

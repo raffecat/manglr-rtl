@@ -1,20 +1,19 @@
 import { log_spawn } from './config'
 import { insert_dom_nodes } from './vnode'
 import { resolve_expr, spawn_model_tpl } from './expr_ops'
+import { Scope, SpawnCtx, SpawnFunc, Syms, Tpl, VNode } from './types'
 
-// sc { tpl, ofs, syms, fragment, spawn_children }
-
-let g_sc = null
-let in_spawn = false
+let g_sc:SpawnCtx
+let in_spawn:boolean = false
 
 // note: to avoid circular import, spawn_children cannot be imported here!
 
-export function init_sc(tpl, syms, spawn_children) {
+export function init_sc(tpl:Tpl, syms:Syms, spawn_children:SpawnFunc): void {
   // initialise the spawn-context object.
   // in_spawn tells us whether this is currently being used.
   g_sc = {
     tpl: tpl,
-    ofs: tpl[0], // offset of main component.
+    ofs: tpl[0]!, // offset of main component.
     syms: syms,
     fragment: document['createDocumentFragment'](),
     spawn_children: spawn_children,
@@ -23,7 +22,7 @@ export function init_sc(tpl, syms, spawn_children) {
   }
 }
 
-export function spawn_tpl_into(tpl_id, scope, into_vnode) {
+export function spawn_tpl_into(tpl_id:number, scope:Scope, into_vnode:VNode): void {
   // spawn a template: a sequence of child nodes.
   // called at page load, then incrementally as 'when'/'each' nodes change state.
   // * don't actually know on entry whether in_spawn is true or false.
@@ -33,10 +32,10 @@ export function spawn_tpl_into(tpl_id, scope, into_vnode) {
   if (log_spawn) console.log("spawn tpl: "+tpl_id);
   if (tpl_id) { // zero is the empty template.
     const sc = g_sc;
-    const tpl_ofs = sc.tpl[tpl_id];
+    const tpl_ofs = sc.tpl[tpl_id]!;
     // push context: save tpl-ofs and set to new template.
     const saved_ofs = sc.ofs ; sc.ofs = tpl_ofs; // seek to beginning of template.
-    const was_in_spawn = in_spawn; in_spawn = true; // so we can detect outermost call!
+    const was_in_spawn = in_spawn; in_spawn = true; // so we can detect outermost call! (XXX could use a depth count)
     // spawn the template contents into the vnode.
     sc.spawn_children(sc, into_vnode, scope);
     // pop context: restore tpl-ofs and in_spawn.

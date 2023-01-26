@@ -1,11 +1,11 @@
 import { debug } from './config'
-import { mkdep, set_dep } from './deps'
+import { mkdep, modify_cell } from './deps'
 import { sym_list, rd } from './tpl'
 import { Model } from './models'
 
 function dep_bind_to_hash_change(dep) {
   // closure to capture `dep` for `hashchange` event.
-  addEventListener('hashchange', function(){ set_dep(dep, location.hash); }, false);
+  addEventListener('hashchange', function(){ modify_cell(dep, location.hash); }, false);
 }
 
 export function create_router(scope) {

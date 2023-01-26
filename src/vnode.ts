@@ -1,4 +1,5 @@
 import { debug } from './config'
+import { VNode } from './types';
 
 // -+-+-+-+-+-+-+-+-+ VNodes -+-+-+-+-+-+-+-+-+
 //
@@ -16,36 +17,36 @@ import { debug } from './config'
 // dom - a DOM Node (Text or Element) OR
 // first, last, d_list - linked list of child VNodes (optional d_list)
 
-export function new_vnode(up, before) { // before can be null (append)
+export function new_vnode(up:VNode|null, before:VNode|null): VNode { // before can be null (append)
   const vnode = { up:null, next_s:null, prev_s:null, first:null, last:null, dom:null, d_list:null };
-  if (up) link_before(up, vnode, before); // insert in 'up' before 'before'.
+  if (up !== null) link_before(up, vnode, before); // insert in 'up' before 'before'.
   return vnode;
 }
 
-export function unlink_vnode(node) {
+export function unlink_vnode(node:VNode): void {
   // remove the vnode from its parent vnode's chain of children.
   const parent = node.up;
-  if (parent) {
+  if (parent !== null) {
     const behind = node.prev_s, ahead = node.next_s;
-    if (behind) behind.next_s = ahead; else parent.first = ahead;
-    if (ahead) ahead.prev_s = behind; else parent.last = behind;
+    if (behind !== null) behind.next_s = ahead; else parent.first = ahead;
+    if (ahead !== null) ahead.prev_s = behind; else parent.last = behind;
     node.up = null; node.prev_s = null; node.next_s = null;
   } else {
     if (debug) throw 5; // no parent!
   }
 }
 
-export function link_before(parent, node, ahead) { // ahead can be null (append)
-  if (debug && node.up) throw 5; // already in a chain!
+export function link_before(parent:VNode, node:VNode, ahead:VNode|null): void {
+  if (debug && node.up !== null) throw 5; // already in a chain!
   node.up = parent;
   const behind = ahead ? ahead.prev_s : parent.last;
   node.prev_s = behind;
   node.next_s = ahead;
-  if (behind) behind.next_s = node; else parent.first = node;
-  if (ahead) ahead.prev_s = node; else parent.last = node;
+  if (behind !== null) behind.next_s = node; else parent.first = node;
+  if (ahead !== null) ahead.prev_s = node; else parent.last = node;
 }
 
-export function move_vnode(parent, node, ahead) { // ahead can be null (append)
+export function move_vnode(parent:VNode, node:VNode, ahead:VNode|null): void {
   // unlink the vnode from its siblings.
   unlink_vnode(node);
   // insert it back in before next_vnode.
@@ -56,15 +57,15 @@ export function move_vnode(parent, node, ahead) { // ahead can be null (append)
   // ...
 }
 
-export function clear_child_nodes(vnode) {
+export function clear_child_nodes(vnode:VNode): void {
   // remove the DOM contents of a vnode (for 'if' vnodes)
   const dom = vnode.dom;
   if (dom !== null) {
-    dom.parentNode.removeChild(dom);
+    dom.parentNode!.removeChild(dom); // NB! assume 'dom' is in the dom (has a parentNode)
     vnode.dom = null; // GC.
     return; // no need to recurse beyond DOM nodes!
   }
-  for (let child = vnode.first; child; ) {
+  for (let child = vnode.first; child !== null; ) {
     const next_s = child.next_s; // save before clear.
     clear_child_nodes(child);
     child.up = child.next_s = child.prev_s = null; // GC.
@@ -73,52 +74,54 @@ export function clear_child_nodes(vnode) {
   vnode.first = vnode.last = null; // reset children list.
 }
 
-function first_dom_node_in_tree(vnode) {
+function first_dom_node_in_tree(vnode:VNode|null): Text|Element|null {
   // search all contents of these nodes first.
-  for (; vnode; vnode = vnode.next_s) {
+  for (; vnode !== null; vnode = vnode.next_s) {
     // if (debug) console.log("... search node:", vnode);
     const found = vnode.dom;
-    if (found) return found;
+    if (found !== null) return found;
     const subtree = vnode.first;
-    if (subtree) {
+    if (subtree !== null) {
       if (debug) console.log("... entering sub-tree:", vnode);
       const found = first_dom_node_in_tree(subtree);
       if (debug) console.log("... leaving sub-tree:", vnode);
-      if (found) return found;
+      if (found !== null) return found;
     }
   }
+  return null
 }
 
-export function insert_dom_nodes(fragment, vnode) {
-  // insert the DOM nodes inside 'fragment' into the DOM at 'vnode',
+export function insert_dom_nodes(fragment:DocumentFragment|HTMLElement, vnode:VNode): void {
+  // insert the DOM nodes in 'fragment' into the DOM at 'vnode',
   // which is typically a 'when' or 'child-of-each' node, but can also
   // be a DOM vnode during initial page render.
+  // NOTE: we know VNode is not a Text node (only caller is spawn_tpl_into)
   if (debug) console.log("insert_dom_nodes:", fragment, vnode);
   for (;;) {
-    if (vnode.dom) {
+    if (vnode.dom !== null) {
       // arrived at a DOM node above the node being populated (which means there
       // were not any sibling DOM nodes to find within the same parent DOM node) -
-      // or the vnode being populated is itself a DOM node.
-      if (debug) console.log("... INSERTED at the parent DOM node:", vnode);
+      // OR the starting vnode is itself a DOM node.
+      if (debug) console.log("... APPEND to parent DOM node:", vnode);
       vnode.dom.appendChild(fragment);
       return;
     }
     // always ignore the children of the starting vnode (want a node _after_ those)
     // always ignore the `dom` of the starting node (want a node _after_ this one)
     // check all siblings that follow the starting node.
-    const found = first_dom_node_in_tree(vnode.next_s); // note: argument can be null.
-    if (found) {
+    const found = first_dom_node_in_tree(vnode.next_s); // note: next_s can be null.
+    if (found !== null) {
       if (debug) console.log("... FOUND:", found);
-      found.parentNode.insertBefore(fragment, found);
+      found.parentNode!.insertBefore(fragment, found); // NB! assume 'found' is in the DOM (has a parentNode)
       return;
     }
     // didn't find a dom node in any later sibling of the vnode.
     // move up one level and check all siblings that follow the parent.
     //  A [B] C D    <-- vnode.up is [B] - will start from [C] - unless [B] is DOM node (found parent)
     //     1 [2] 3   <-- starting vnode [2] - have checked [3]
-    vnode = vnode.up;
+    vnode = vnode.up!; // NB! null check follows assignment
     if (debug) console.log("... go up to:", vnode);
-    if (!vnode) {
+    if (vnode === null) {
       if (debug) console.log("... CANNOT INSERT - no parent DOM node found.");
       return;
     }

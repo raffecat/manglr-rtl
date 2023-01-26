@@ -2,28 +2,38 @@ import { debug, log_spawn } from './config'
 import { resolve_expr, is_true } from './expr_ops'
 import { new_vnode, clear_child_nodes } from './vnode'
 import { d_list_add, run_d_list } from './d_list'
-import { new_dep, subscribe_dep, remove_dep, kill_dep, queue_action } from './deps'
+import { new_cell, subscribe_dep, remove_fwd, kill_cell, queue_action } from './cells'
 import { spawn_tpl_into } from './spawn-tpl'
+import { Cell, DList, Scope, SpawnCtx, VNode, WhenState } from './types'
 
-// sc { tpl, ofs, syms, fragment, spawn_children }
-
-export function create_when(sc, parent, scope) {
+export function create_when(sc:SpawnCtx, parent:VNode, scope:Scope): void {
   // runs in the context of an application update action.
   // Creates a vnode representing a 'when' node.
   // When the truth value of the bound expression changes, creates or
   // destroys the contents of this vnode to bring the view into sync.
-  const body_tpl = sc.tpl[sc.ofs++]; // [1] body template to spawn.
-  const expr_dep = resolve_expr(sc, scope); // [2..] expr
+  const body_tpl = sc.tpl[sc.ofs++]!; // [1] body template to spawn.
+  const expr_dep = resolve_expr(sc, scope) as Cell; // [2..] expr
   const vnode = new_vnode(parent, null);
-  const d_list = []; // local d_list to capture spawned contents.
-  vnode.d_list = d_list; // for update_when, destroy_when.
-  // new_scope: { locals, cssm, c_tpl, c_locals, c_cssm, d_list }
-  const new_scope = { locals:scope.locals, cssm:scope.cssm,
-    c_tpl:scope.c_tpl, c_locals:scope.c_locals, c_cssm:scope.c_cssm, d_list:d_list };
-  const state = { vnode:vnode, scope:new_scope, expr_dep:expr_dep, body_tpl:body_tpl, in_doc:false };
+  const new_d_list:DList = []; // local d_list to capture spawned contents.
+  vnode.d_list = new_d_list; // for update_when, destroy_when.
+  const new_scope:Scope = {
+    locals: scope.locals,
+    cssm: scope.cssm,
+    c_tpl: scope.c_tpl,
+    c_locals: scope.c_locals,
+    c_cssm: scope.c_cssm,
+    d_list: new_d_list
+  };
+  const state:WhenState = {
+    vnode: vnode,
+    scope: new_scope,
+    expr_dep: expr_dep,
+    body_tpl: body_tpl,
+    in_doc: false
+  };
   if (debug) { vnode.d_is = 'when'; vnode.d_in = scope.cssm; vnode.d_state = state }
   if (log_spawn) console.log("[s] create 'when':", state);
-  const when_dep = new_dep(expr_dep.val, update_when_dep, state);
+  const when_dep = new_cell(expr_dep.val, update_when_dep, state);
   d_list_add(scope.d_list, destroy_when, when_dep);
   // create_when in two different contexts:
   // (a) initial render - (want to render the children now!)
@@ -37,7 +47,7 @@ export function create_when(sc, parent, scope) {
   update_when_action(state);
 }
 
-function update_when_dep(when_dep, state) {
+function update_when_dep(_when_cell:Cell, state:WhenState): void {
   // runs inside a dep-update transaction.
   // cannot change the dep network during a dep-update transaction,
   // so queue an action to add/remove nodes (if dep value has changed)
@@ -47,7 +57,7 @@ function update_when_dep(when_dep, state) {
   }
 }
 
-function update_when_action(state) {
+function update_when_action(state:WhenState): void {
   // runs in the context of an application update action.
   // create or destroy the `contents` based on boolean `value`.
   // note: it's possible that that the boolean value has changed back
@@ -64,7 +74,7 @@ function update_when_action(state) {
       // destroy the current contents of the when vnode.
       // destroy everything on the d_list - a when_vnode always has d_list attached.
       // note: d_list could go on the state for when nodes (but not for each nodes)
-      run_d_list(when_vnode.d_list, false); // in_destroy=false.
+      run_d_list(when_vnode.d_list!, false); // in_destroy=false. NB! when_vnode always has d_list.
       // remove DOM contents of when_vnode from the DOM.
       // also removes all child vnodes (resets when_vnode to empty)
       clear_child_nodes(when_vnode);
@@ -72,14 +82,14 @@ function update_when_action(state) {
   }
 }
 
-function destroy_when(when_dep) {
+function destroy_when(when_dep:Cell): void {
   // runs in the context of an application update action.
   // called from enclosing d_list (will be a 'when' or 'child-of-repeat' d_list)
-  const state = when_dep.arg;
+  const state = when_dep.state as WhenState;
   // must unsubscribe when_dep from the expr_dep.
-  kill_dep(when_dep); // do not receive any more updates.
-  remove_dep(state.expr_dep, when_dep); // remove when_dep from expr_dep's fwd list.
+  kill_cell(when_dep); // do not receive any more updates.
+  remove_fwd(state.expr_dep, when_dep); // remove when_dep from expr_dep's fwd list (stop updates)
   // must run the d_list for the when_vnode.
   // note: (d_list) in_destroy == true : no need to remove child DOM nodes or vnodes.
-  run_d_list(state.vnode.d_list, true); // in_destroy=true.
+  run_d_list(state.vnode.d_list!, true); // in_destroy=true. NB! when_vnode always has d_list.
 }

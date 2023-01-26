@@ -2,7 +2,7 @@
 
 // -+-+-+-+-+-+-+-+-+ DOM Manipulation -+-+-+-+-+-+-+-+-+
 
-export function dom_add_class(elem, cls) {
+export function dom_add_class(elem:HTMLElement, cls:string): void {
   const clist = elem.classList;
   if (clist) {
     // classList is fast and avoids spurious reflows.
@@ -19,7 +19,7 @@ export function dom_add_class(elem, cls) {
   }
 }
 
-export function dom_remove_class(elem, cls) {
+export function dom_remove_class(elem:HTMLElement, cls:string): void {
   const clist = elem.classList;
   if (clist) {
     // classList is fast and avoids spurious reflows.

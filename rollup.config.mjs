@@ -1,7 +1,8 @@
-import { eslint } from 'rollup-plugin-eslint';
+import typescript from '@rollup/plugin-typescript';
 import buble from '@rollup/plugin-buble';
 import uglify from 'rollup-plugin-uglify';
-import consts from 'rollup-plugin-consts';
+import alias from '@rollup/plugin-alias';
+//import consts from 'rollup-plugin-consts';
 import fs from 'fs'
 
 const major = 0, minor = 1
@@ -10,6 +11,9 @@ const build = +fs.readFileSync('build-version', 'utf8') + 1
 fs.writeFileSync('build-version', ''+build, 'utf8')
 
 const banner = `/* <~> Manglr ${major}.${minor}.${build} | by Andrew Towers | MIT License | https://github.com/raffecat/manglr-rtl */`
+
+const ts_conf = {
+}
 
 // https://buble.surge.sh/guide/
 const buble_conf = {
@@ -66,26 +70,31 @@ const uglify_conf = {
 
 export default [
   {
-    input: 'src/mount.js',
+    input: 'src/mount.ts',
     output: {
       file: 'build/manglr.debug.js',
       format: 'iife',
       banner: banner
     },
     plugins: [
-      consts({ debug: true }),
-      eslint(),
+      typescript(ts_conf),
       buble(buble_conf)
     ]
   },
   {
-    input: 'src/mount.js',
+    input: 'src/mount.ts',
     output: {
       file: 'build/manglr.min.js',
-      format: 'iife'
+      format: 'iife',
+      banner: banner
     },
     plugins: [
-      consts({ debug: false }),
+      alias({
+        entries: [
+          { find: './debug', replacement: '../debug-false' },
+        ]
+      }),
+      typescript(ts_conf),
       buble(buble_conf),
       uglify(uglify_conf)
     ]

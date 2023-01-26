@@ -1,6 +1,6 @@
 // import { debug } from './config'
 
-export function b93_decode(text) {
+export function b93_decode(text:string): number[] {
   var res = [], len = text.length, i = 0, acc = 0, ch;
   for (;i<len;i++) {
     ch = text.charCodeAt(i);

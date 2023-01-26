@@ -1,7 +1,8 @@
+import { Syms, Tpl } from "./types";
 
-export let sym_list; // Array: symbol strings.
-export let tpl; // Array: encoded templates.
-export let fragment; // DocumentFragment (non-null when inside a spawn-context)
+export let sym_list: Syms; // Array: symbol strings.
+export let tpl: Tpl; // Array: encoded templates.
+export let fragment: DocumentFragment|HTMLElement; // DocumentFragment (non-null when inside a spawn-context)
 export let spawn_tpl_into; // spawn_tpl function.
 
 let p = 0; // read position in tpl being spawned.
