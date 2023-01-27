@@ -1,11 +1,10 @@
 import { debug, hasOwn, log_spawn } from './config'
-import { resolve_expr } from './expr_ops'
 import { new_vnode, move_vnode, unlink_vnode, clear_child_nodes } from './vnode'
 import { d_list_add, run_d_list } from './d_list'
-import { new_cell, subscribe_dep, remove_fwd, kill_cell, queue_action } from './cells'
+import { new_cell, subscribe_dep, remove_fwd, kill_cell } from './cells'
 import { spawn_tpl_into } from './spawn-tpl'
 import { Collection } from './models'
-import { Cell, CollectionType, DList, EachKeys, EachState, Local, ModelType, Scope, SpawnCtx, VNode } from './types'
+import { Cell, CollectionType, DList, EachKeys, EachState, op, ModelType, Scope, SpawnCtx, VNode } from './types'
 
 export function create_each(sc:SpawnCtx, parent:VNode, scope:Scope): void {
   // runs in the context of an application update action.
@@ -14,13 +13,13 @@ export function create_each(sc:SpawnCtx, parent:VNode, scope:Scope): void {
   // and destroying child vnodes to bring the view into sync with the value.
   const bind_as = sc.tpl[sc.ofs++]!; // index in locals.
   const body_tpl = sc.tpl[sc.ofs++]!; // body template to spawn.
-  const coll = resolve_expr(sc, scope) as CollectionType; // checked below
+  const coll = sc.resolve_expr[sc.tpl[sc.ofs++]!]!(sc, scope).val as CollectionType; // checked below
   if (!(coll instanceof Collection)) throw 5; // assert: must be a Collection.
   const vnode = new_vnode(parent, null);
-  const state:EachState = { vnode:vnode, scope:scope, coll:coll, body_tpl:body_tpl, bind_as:bind_as, have_keys:{} };
+  const state:EachState = { vnode:vnode, scope:scope, coll:coll, body_tpl:body_tpl, bind_as:bind_as, have_keys:{}, update_each: update_each_action };
   if (debug) { vnode.d_is = 'each'; vnode.d_in = scope.cssm; vnode.d_state = state }
   if (log_spawn) console.log("[s] create 'each':", state);
-  const each_dep = new_cell(coll.items.val, update_each_dep, state);
+  const each_dep = new_cell(false, op.bound_each, state);
   d_list_add(scope.d_list, destroy_each, each_dep);
   // create_each in two different contexts:
   // (a) initial render - (want to render the rep children now!)
@@ -28,7 +27,6 @@ export function create_each(sc:SpawnCtx, parent:VNode, scope:Scope): void {
   // (b) an enclosing spawn_tpl due to a dep change - (want to render the rep children now!)
   //     - subscribe_dep will append each_dep to in_transaction
   // in both cases, create_each runs inside an existing spawn-context.
-  // we can avoid an unnecessary update by creating each_dep with coll.items.val !
   subscribe_dep(coll.items, each_dep);
   // update the each-node now, within the current spawn-context.
   update_each_action(state);
@@ -48,13 +46,6 @@ export function create_each(sc:SpawnCtx, parent:VNode, scope:Scope): void {
 // the only things that need to hold on to scopes are 'when' and 'each'
 // state objects - so they can spawn new children using that scope.
 // all other nodes will pass through their scope while spawning.
-
-function update_each_dep(when_dep:Cell, state:EachState): void {
-  // runs inside a dep-update transaction.
-  // cannot change the dep network during a dep-update transaction,
-  // so queue an action to add/remove nodes.
-  queue_action(update_each_action, state)
-}
 
 function update_each_action(state:EachState): void {
   // runs in the context of an application update action.
@@ -97,7 +88,8 @@ function update_each_action(state:EachState): void {
         d_list: new_d_list
       };
       // assign the model into the new scope.
-      new_locals[state.bind_as] = model;
+      const cell = new_cell(model, op.is_const, null); cell.wait = -1; // is const.
+      new_locals[state.bind_as] = cell;
       // spawn the contents of the repeat node.
       // ensure: if not inside a spawn-context, set up a new spawn-context here !!
       spawn_tpl_into(state.body_tpl, new_scope, inst_vnode);

@@ -21,7 +21,7 @@ export function create_component(sc:SpawnCtx, parent:VNode, outer_scope:Scope): 
   let lp = 0;
   while (nins--) {
     // [2...] = expressions bound to component inputs.
-    new_locals[lp++] = resolve_expr(sc, outer_scope);
+    new_locals[lp++] = resolve_expr[sc.tpl[sc.ofs++]!]!(sc, outer_scope);
   }
   // note: contents of component tag (c_tpl) must be spawned using the outer locals!
   // note: components pass through the 'd_list' of the enclosing 'when' or 'each'.
@@ -40,7 +40,7 @@ export function create_component(sc:SpawnCtx, parent:VNode, outer_scope:Scope): 
   // push context: save tpl-ofs and set to component's template.
   const saved_ofs = sc.ofs ; sc.ofs = tpl_ofs+3; // tpl[3] is the first local binding.
   while (ndefs--) {
-    new_locals[lp++] = resolve_expr(sc, new_scope);
+    new_locals[lp++] = resolve_expr[sc.tpl[sc.ofs++]!]!(sc, new_scope);
   }
   // component body: spawn vnodes that make up the component body.
   sc.spawn_children(sc, parent, new_scope);

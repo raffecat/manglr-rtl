@@ -1,10 +1,10 @@
 import { debug, log_spawn } from './config'
 import { new_vnode } from './vnode'
-import { resolve_expr, to_text } from './expr_ops'
+import { resolve_expr } from './expr_ops'
 import { new_cell, subscribe_dep, remove_fwd } from './cells'
 import { d_list_add } from './d_list'
 import { attr_ops } from './dom_attrs'
-import { BoundTextState, Cell, Scope, SpawnCtx, VNode } from './types'
+import { BoundTextState, Cell, op, Scope, SpawnCtx, to_text, VNode } from './types'
 
 // sc { tpl, ofs, syms, fragment, spawn_children }
 
@@ -27,7 +27,7 @@ export function create_text(sc:SpawnCtx, parent:VNode, _scope:Scope): void {
 export function create_bound_text(sc:SpawnCtx, parent:VNode, scope:Scope): void {
   // create a DOM Text node with a bound expression.
   const vnode = new_vnode(parent, null);
-  const expr_dep = resolve_expr(sc, scope) as Cell; // always a Cell.
+  const expr_dep = resolve_expr[sc.tpl[sc.ofs++]!]!(sc, scope);
   const text = to_text(expr_dep.val);
   if (log_spawn) console.log("[s] createTextNode:", expr_dep, text);
   // create a DOM TextNode.
@@ -38,16 +38,10 @@ export function create_bound_text(sc:SpawnCtx, parent:VNode, scope:Scope): void 
   // watch expr_dep for changes unless it is a const-dep.
   if (expr_dep.wait >= 0) {
     const state: BoundTextState = { dom_node:dom_node, expr_dep:expr_dep };
-    const text_dep = new_cell(expr_dep.val, update_bound_text, state);
+    const text_dep = new_cell(expr_dep.val, op.bound_text, state);
     subscribe_dep(expr_dep, text_dep);
     d_list_add(scope.d_list, destroy_bound_text, text_dep);
-    update_bound_text(text_dep, state); // update now.
   }
-}
-
-function update_bound_text(_cell:Cell, state:BoundTextState): void {
-  // update the DOM Text Node from the expr_dep's value.
-  state.dom_node.data = to_text(state.expr_dep.val);
 }
 
 function destroy_bound_text(text_dep:Cell): void {

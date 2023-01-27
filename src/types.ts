@@ -15,7 +15,7 @@ export type EventTargetHack = (e:Event) => string;
 export type BindToArgsFunc = (cell:Cell, args:Cell[]) => void;
 export type BindOneArgFunc = (cell:Cell, arg:Cell) => void;
 export type CellVal = null|string|number|boolean|ModelType|CollectionType|ActionType|ModelType[];
-export type CellFuncArg = null|Cell|Cell[]|EachState|WhenState|BoundTextState|BoundExprState|BoundKeyIndex|FieldProxyState;
+export type CellState = null|Cell|Cell[]|EachState|WhenState|BoundTextState|BoundExprState|BoundKeyIndex|FieldProxyState;
 export type CellFunc =
     | BindToArgsFunc
     | BindOneArgFunc
@@ -25,14 +25,54 @@ export type CellFunc =
     | ((cell:Cell, state:BoundExprState) => void) // update_bound_attr, update_bound_prop_text, update_bound_prop_bool, update_bound_class, update_bound_style_text
     | ((cell:Cell, state:BoundKeyIndex) => void) // update_key_index
 
-export const enum fw {
-  copy_val, // copy 'val' into the Cell (no other action)
-  model_swap, // get named field from dynamic model
+export const enum op {
+    is_const = 0,
+    is_model,
+    is_collection,
+    is_item_array,
+    is_action,
+    is_field,
+    last_non_update_op,
+    // update ops:
+    field_proxy, // get named field from dynamic model
+    concat,
+    equals,
+    not,
+    ternary,
+    not_equal,
+    multiply,
+    is_empty,
+    not_empty,
+    ge,
+    le,
+    gt,
+    lt,
+    count,
+    sub,
+    add,
+    mul,
+    div,
+    mod,
+    or,
+    and,
+    elvis,
+    //update_key_index,
+    // DOM bindings.
+    bound_text,
+    bound_attr,
+    bound_prop_text,
+    bound_prop_bool,
+    bound_class,
+    bound_style_text,
+    bound_each,
+    bound_when,
+    event_target,
 }
-export type FwdList = (Cell|fw)[];
+
+export type FwdList = Cell[];
 export type Cell = {
     dirty:boolean, val:CellVal, wait:number, fwd:FwdList, dead:boolean
-    fn:CellFunc|null, state:CellFuncArg|null, // to be removed…
+    op:op, state:CellState|null, // applied in decr_and_update
     n?:number, d_field?:string, d_model?:ModelType // if (debug)
 }
 
@@ -59,14 +99,14 @@ export type ActionType = {
     d_is?:string, d_field?:string, d_model?:ModelType // if (debug)
 }
 
-export type FieldProxyState = { field:Cell|null, name:string };
+export type FieldProxyState = { left:Cell, model:ModelType|null, field:Cell|null, name:string };
 export type BoundTextState = { dom_node:Text, expr_dep:Cell }
 export type BoundExprState = { name:string, dom_node:HTMLElement, expr_dep:Cell };
 export type BoundKeyIndex = { keys: string[], vals:Cell[] };
 export type BoundEventState = { dom_node:HTMLElement, name:string, handler:(e:Event)=>void }
 export type EachKeys = Record<string,VNode|undefined>
-export type EachState = { vnode:VNode, scope:Scope, coll:CollectionType, body_tpl:number, bind_as:number, have_keys:EachKeys };
-export type WhenState = { vnode:VNode, scope:Scope, expr_dep:Cell, body_tpl:number, in_doc:boolean }
+export type EachState = { vnode:VNode, scope:Scope, coll:CollectionType, body_tpl:number, bind_as:number, have_keys:EachKeys, update_each:(state:EachState)=>void };
+export type WhenState = { vnode:VNode, scope:Scope, cond_cell:Cell, body_tpl:number, in_doc:boolean, update_when:(state:WhenState)=>void }
 export type TimerState = { act:ActionType, timer:number, dead:boolean, d_is?:string }
 
 export type Scope = {
@@ -79,6 +119,7 @@ export type Scope = {
 }
 
 export type SpawnFunc = (sc:SpawnCtx, parent:VNode, scope:Scope) => void;
+export type ExprFunc = (sc: SpawnCtx, scope: Scope) => Cell;
 
 export type SpawnCtx = {
     tpl: Tpl
@@ -86,8 +127,10 @@ export type SpawnCtx = {
     syms: Syms
     fragment: DocumentFragment|HTMLElement
     spawn_children: SpawnFunc
-    resolve_expr: OpFunc
-    spawn_model_tpl: (sc:SpawnCtx, scope:Scope) => ModelType
+    resolve_expr: ExprFunc[]
+    spawn_model_tpl: (sc:SpawnCtx, scope:Scope) => ModelType,
+    event_target_cell: Cell,
+    event_key_cell: Cell,
 }
 
 export type VNode = {
@@ -99,4 +142,12 @@ export type VNode = {
     last: VNode|null
     d_list: DList|null     // delete-list: non-null if used
     d_is?:string, d_in?:string, d_state?:any // if (debug)
+}
+
+export function is_true(val:any): boolean {
+  return (val instanceof Array ? val['length'] > 0 : !!val);
+}
+
+export function to_text(val:any): string {
+  return (val == null || val instanceof Object) ? '' : (''+val);
 }

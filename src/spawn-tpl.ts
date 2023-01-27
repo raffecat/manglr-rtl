@@ -1,7 +1,8 @@
 import { log_spawn } from './config'
 import { insert_dom_nodes } from './vnode'
 import { resolve_expr, spawn_model_tpl } from './expr_ops'
-import { Scope, SpawnCtx, SpawnFunc, Syms, Tpl, VNode } from './types'
+import { op, Scope, SpawnCtx, SpawnFunc, Syms, Tpl, VNode } from './types'
+import { new_cell } from './cells'
 
 let g_sc:SpawnCtx
 let in_spawn:boolean = false
@@ -19,6 +20,8 @@ export function init_sc(tpl:Tpl, syms:Syms, spawn_children:SpawnFunc): void {
     spawn_children: spawn_children,
     resolve_expr: resolve_expr,
     spawn_model_tpl: spawn_model_tpl,
+    event_target_cell: new_cell("", op.is_field, null),
+    event_key_cell: new_cell(0, op.is_field, null),
   }
 }
 

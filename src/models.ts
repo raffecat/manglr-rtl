@@ -1,6 +1,6 @@
 import { debug, hasOwn } from './config'
 import { new_cell, modify_cell } from './cells'
-import { Cell, CollectionType, ModelType, Scope, SpawnCtx } from './types';
+import { Cell, CollectionType, ModelType, op, Scope, SpawnCtx } from './types';
 
 // -+-+-+-+-+-+-+-+-+ Models -+-+-+-+-+-+-+-+-+
 
@@ -21,7 +21,7 @@ export function Model(this:ModelType): any {
 export function Collection(this:CollectionType, scope:Scope): any {
   this._id = 'c'+(g_model++);
   this.scope = scope; // for spawning new models.
-  this.items = new_cell([], null, null);
+  this.items = new_cell([], op.is_item_array, null);
   this.model_tpl = 0;
 }
 
